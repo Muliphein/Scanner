@@ -1,0 +1,11 @@
+// the configured options and settings for Tutorial
+#define Scanner_VERSION_MAJOR @Scanner_VERSION_MAJOR@
+#define Scanner_VERSION_MINOR @Scanner_VERSION_MINOR@
+
+#define CMAKE_SHADER_PATH "@CMAKE_CURRENT_SOURCE_DIR@/resource/shader/"
+#define CMAKE_CALIBRATION_PICTURE_PATH "@CMAKE_CURRENT_SOURCE_DIR@/resource/calibration/picture/"
+#define CMAKE_CALIBRATION_RESULT_PATH "@CMAKE_CURRENT_SOURCE_DIR@/resource/calibration/result/"
+#define CMAKE_CALIBRATION_TEST_PATH "@CMAKE_CURRENT_SOURCE_DIR@/resource/calibration/test/"
+#define CMAKE_LOCATION_PATH "@CMAKE_CURRENT_SOURCE_DIR@/resource/location/"
+#define CMAKE_VIDEO_PATH "@CMAKE_CURRENT_SOURCE_DIR@/resource/video/"
+
