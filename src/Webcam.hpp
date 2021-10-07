@@ -5,6 +5,7 @@
 #include <cstring>
 #include <vector>
 #include "LittleUtils.hpp"
+#include "Aruco.hpp"
 
 class Webcam{
 
@@ -237,6 +238,49 @@ public:
         return true;
     }
 
+    bool get3Dto2DTransform(const std::vector<cv::Point3f>& objectPosition, const std::vector<cv::Point2f>& pixelPosition, cv::Mat &rotMat, cv::Mat &tVec){
+        
+        cv::Mat raux;
+        cv::Mat taux;
+
+        cv::solvePnP(objectPosition, pixelPosition, intrinsic, distortion, raux, taux, false);
+        
+        cv::Mat rVec;
+
+        raux.convertTo(rVec, CV_64F);
+        taux.convertTo(tVec, CV_64F);
+
+        cv::Rodrigues(rVec, rotMat);
+
+        cv::Mat rotMatInv(cv::Size(3, 3), CV_64F);
+        cv::invert(rotMat, rotMatInv);
+
+        return true;
+    }
+
+    bool getCharucoCornersPosition(const std::vector<int> &charucoIds, const std::vector<cv::Point2f> &charucoCorners, std::vector<cv::Point3f> &charucoCornersPositions) {
+        std::vector<cv::Point3f> charucoCorner3DPosition;
+        charucoCorner3DPosition.clear();
+        for (int i=0; i<charucoIds.size(); ++i){
+            charucoCorner3DPosition.emplace_back(charucoIds[i]/boardSizeDefault.width, charucoIds[i]%boardSizeDefault.width, 0.0f);
+        }
+
+        cv::Mat rotMat;
+        cv::Mat tVec;
+
+        get3Dto2DTransform(charucoCorner3DPosition, charucoCorners, rotMat, tVec);
+
+        charucoCornersPositions.clear();
+        for (int i=0; i<charucoIds.size(); ++i){
+            double objectPosition[1][3] = {charucoCorner3DPosition[i].x, charucoCorner3DPosition[i].y, charucoCorner3DPosition[i].z};
+            cv::Mat Pworld(cv::Size(1, 3), CV_64F, objectPosition);
+            cv::Mat Pcam = rotMat * Pworld + tVec; 
+            cv::Point3f Pcam3f(Pcam);
+            charucoCornersPositions.emplace_back(-Pcam3f.x, -Pcam3f.y, Pcam3f.z); // Make the vision Look the same as the picture
+        }
+        return true;
+    }
+
     void iamgeUndistortShow(cv::Mat &image){
         
         cv::namedWindow("Frame", cv::WINDOW_NORMAL);
@@ -320,6 +364,31 @@ public:
                 outputImage.at<double>(i, j) = 0.0f;
             }
         }
+    }
+
+    void getCharucoPosition(cv::Mat &inputImage, std::vector<int> &markerIds, std::vector<std::vector<cv::Point2f> > &markerCorners, std::vector<int> &charucoIds, std::vector<cv::Point2f> &charucoCorners) {
+        
+        cv::Ptr<cv::aruco::DetectorParameters> params = cv::aruco::DetectorParameters::create();
+        params->cornerRefinementMethod = cv::aruco::CORNER_REFINE_SUBPIX;
+
+        cv::aruco::detectMarkers(inputImage, dictionaryDefault, markerCorners, markerIds, params);
+
+        if (markerIds.size() > 0) {
+            cv::aruco::interpolateCornersCharuco(markerCorners, markerIds, inputImage, charucoBoardDefault, charucoCorners, charucoIds);
+            if (charucoIds.size() > 0)
+                cv::aruco::drawDetectedCornersCharuco(inputImage, charucoCorners, charucoIds, cv::Scalar(255, 0, 0));
+        }
+
+        return;
+
+    }
+
+    void drawCharucoPosition(cv::Mat &inputImage, std::vector<int> &markerIds, std::vector<std::vector<cv::Point2f> > &markerCorners, std::vector<int> &charucoIds, std::vector<cv::Point2f> &charucoCorners){
+        getCharucoPosition(inputImage, markerIds, markerCorners, charucoIds, charucoCorners);
+        // std::cout << "Find Corners = " << charucoIds.size() << std::endl;
+        if (charucoIds.size() > 0)
+            cv::aruco::drawDetectedCornersCharuco(inputImage, charucoCorners, charucoIds, cv::Scalar(255, 0, 0));
+
     }
 
 };

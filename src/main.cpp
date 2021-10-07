@@ -278,15 +278,43 @@ int main()
     queue.clear();
     queue.push_back(dynamic_cast<BasicObject*>(&myAxis));
     queue.push_back(dynamic_cast<BasicObject*>(&myCamera));
+
     LaserObject* myLaserPointsCloud = new LaserObject(laserPoints);
     queue.push_back(dynamic_cast<BasicObject*>(myLaserPointsCloud));
 
     float planarA, planarB, planarC, planarD;
     fitPlanar(laserPoints, planarA, planarB, planarC, planarD);
 
+    showProcessEnd("Calculate the Laser Plane");
 
     PlannarObject* myPlanarObject = new PlannarObject(planarA, planarB, planarC, planarD, cv::Size(12, 12));
     queue.push_back(dynamic_cast<BasicObject*>(myPlanarObject));
+
+    {
+        showProcessStart(" Charuco Test ");
+        
+        webCameraCapture.open(cameraScanVideo);
+        cv::Mat frameImage;
+        // Capture Test
+        if (webCameraCapture.read(frameImage)){
+            std::vector<int> markerIds;
+            std::vector<std::vector<cv::Point2f> > markerCorners;
+            std::vector<int> charucoIds;
+            std::vector<cv::Point2f> charucoCorners;
+            std::vector<cv::Point3f> charucoCorners3DInCamera;
+            myWebCam.getCharucoPosition(frameImage, markerIds, markerCorners, charucoIds, charucoCorners);
+            myWebCam.getCharucoCornersPosition(charucoIds, charucoCorners, charucoCorners3DInCamera);
+            cv::namedWindow(opencvWindow1, cv::WINDOW_NORMAL);
+            cv::resizeWindow(opencvWindow1, cv::Size(960, 540));
+            cv::moveWindow(opencvWindow1, 0, 0);
+            cv::imshow(opencvWindow1, frameImage);
+            // cv::destroyWindow(opencvWindow1);
+            PointCloudObject* myCharucoPointCloudObject = new PointCloudObject(charucoCorners3DInCamera);
+            queue.push_back(dynamic_cast<BasicObject*>(myCharucoPointCloudObject));
+
+        }
+        showProcessEnd(" Charuco Test ");
+    }
 
 
     while (!glfwWindowShouldClose(window))
