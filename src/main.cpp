@@ -15,6 +15,8 @@
 #include "CameraObject.hpp"
 #include "Aruco.hpp"
 #include "LaserObject.hpp"
+#include "PlanarObject.hpp"
+#include "MathAlgorithm.hpp"
 
 #include <opencv2/opencv.hpp>
 
@@ -56,6 +58,7 @@ std::string cameraCalibrationVideo = CMAKE_VIDEO_PATH + std::string("Calibration
 std::string cameraScanVideo = CMAKE_VIDEO_PATH+std::string("ObjectScan.mp4");
 std::string cameraCalibrationResult = CMAKE_VIDEO_PATH + std::string("CameraResult.xml");
 std::string cameraCalibrationSplitFolder = CMAKE_VIDEO_PATH + std::string("split/");
+std::string laserPointsFile = CMAKE_VIDEO_PATH + std::string("LaserPointPosition.txt");
 
 // draw objects
 std::vector <BasicObject*> queue;
@@ -76,6 +79,7 @@ Webcam myWebCam;
 #define SKIP_CALI_RESULT_DIAPLAY
 #define SKIP_STEP_1_SPLIT_VIDEO
 // #define SKIP_CALI_RESULT_STORE
+#define SKIP_LASER_POINT_CALC
 
 int main()
 {
@@ -135,31 +139,13 @@ int main()
         showProcessEnd("Camera Calibration");
     }
 
-    // Step 3: Calculate the Laser Plane
 
-    showProcessStart("Calculate the Laser Plane");
-    
-    cv::namedWindow(opencvWindow1, cv::WINDOW_NORMAL);
-    cv::resizeWindow(opencvWindow1, cv::Size(960, 540));
-    cv::moveWindow(opencvWindow1, 0, 0);
-    
-    cv::namedWindow(opencvWindow2, cv::WINDOW_NORMAL);
-    cv::resizeWindow(opencvWindow2, cv::Size(960, 540));
-    cv::moveWindow(opencvWindow2, 0, 550);
 
-    std::vector <std::string> fileNames;
-    cv::glob(cameraCalibrationSplitFolder, fileNames);
-    if (fileNames.empty()){
-        showError("No Split File");
-        return 0;
-    } else {
-        std::cout << "Glob " << fileNames.size() << " files" << std::endl;
-    }
+    std::vector <cv::Point3f> laserPoints;
 
         // OpenGL Init
     glfwPreProcess();
     glfwSetWindowPos(window, 960, 25);
-
         // Camera Show
     CameraObject myCamera;
         // Axis Show
@@ -170,13 +156,31 @@ int main()
         (CMAKE_SHADER_PATH+std::string("3dFragmentShader.glsl")).c_str()
     );
 
+
+    // Step 3: Calculate the Laser Plane
+    #ifndef SKIP_LASER_POINT_CALC
+    showProcessStart("Calculate the Laser Points");
+    std::vector <std::string> fileNames;
+    cv::glob(cameraCalibrationSplitFolder, fileNames);
+    if (fileNames.empty()){
+        showError("No Split File");
+        return 0;
+    } else {
+        std::cout << "Glob " << fileNames.size() << " files" << std::endl;
+    }
     queue.push_back(dynamic_cast<BasicObject*>(&myAxis));
     queue.push_back(dynamic_cast<BasicObject*>(&myCamera));
 
     cv::Mat image;
     int validFramePointer = 0;
-    std::vector <cv::Point3f> laserPoints;
 
+    cv::namedWindow(opencvWindow1, cv::WINDOW_NORMAL);
+    cv::resizeWindow(opencvWindow1, cv::Size(960, 540));
+    cv::moveWindow(opencvWindow1, 0, 0);
+    
+    cv::namedWindow(opencvWindow2, cv::WINDOW_NORMAL);
+    cv::resizeWindow(opencvWindow2, cv::Size(960, 540));
+    cv::moveWindow(opencvWindow2, 0, 550);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -187,6 +191,7 @@ int main()
         // }
 
         if (validFramePointer >= fileNames.size()) {
+            // getinFilesFlag = false;
             break;
         }
 
@@ -259,9 +264,66 @@ int main()
 
     }
 
-    
+    serialize(laserPoints, laserPointsFile);
 
+    cv::destroyWindow(opencvWindow1);
+    cv::destroyWindow(opencvWindow2);
+
+    showProcessEnd("Calculate the Laser Points");
+    #endif
+
+    // Step 4: Calculate the Laser Plane
     showProcessStart("Calculate the Laser Plane");
+    deserialize(laserPoints, laserPointsFile);
+    queue.clear();
+    queue.push_back(dynamic_cast<BasicObject*>(&myAxis));
+    queue.push_back(dynamic_cast<BasicObject*>(&myCamera));
+    LaserObject* myLaserPointsCloud = new LaserObject(laserPoints);
+    queue.push_back(dynamic_cast<BasicObject*>(myLaserPointsCloud));
+
+    float planarA, planarB, planarC, planarD;
+    fitPlanar(laserPoints, planarA, planarB, planarC, planarD);
+
+
+    PlannarObject* myPlanarObject = new PlannarObject(planarA, planarB, planarC, planarD, cv::Size(12, 12));
+    queue.push_back(dynamic_cast<BasicObject*>(myPlanarObject));
+
+
+    while (!glfwWindowShouldClose(window))
+    {
+
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // Get Input
+        processInput(window);
+
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+
+        myShader.use();
+
+        // Set the projection
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        myShader.setMat4("projection", projection);
+        glm::mat4 view = camera.GetViewMatrix();
+        myShader.setMat4("view", view);
+        glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+        myShader.setMat4("model", model);
+
+        // Render
+        for (int i=0; i<queue.size(); ++i){
+            BasicObject * pointer = queue[i];
+            pointer->preProcess();
+            myShader.setVec4("color", pointer->getColor());
+            glBindVertexArray(pointer->getVAOHandle());
+            glDrawArrays(pointer->getDrawType(), 0, pointer->getPointNum());
+        }
+
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
 
 
     // Glfw terminate

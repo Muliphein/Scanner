@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <random>
+#include <fstream>
 
 float randomlr(float l, float r)
 {
@@ -46,6 +47,27 @@ bool pointInQuad(cv::Point2f point, cv::Point2f p1, cv::Point2f p2, cv::Point2f 
         )
         return true;
     else return false;
+}
+
+void serialize (const std::vector<cv::Point3f> & data, std::string fileName) {
+    std::ofstream fout;
+    fout.open(fileName, std::ios::out);
+    fout << data.size() << std::endl;
+    for (auto item: data){
+        fout << item.x << " " << item.y << " " << item.z << std::endl;
+    }
+}
+
+void deserialize (std::vector<cv::Point3f> & data, std::string fileName){
+    std::ifstream fin;
+    fin.open(fileName, std::ios::in);
+    int n;
+    fin >> n;
+    for (int i=0; i<n; ++i){
+        float x, y, z;
+        fin >> x >> y >> z;
+        data.emplace_back(x, y, z);
+    }
 }
 
 #endif

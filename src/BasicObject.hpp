@@ -15,7 +15,7 @@ protected:
     }
 
 public:
-    unsigned int getVAOHandle() {
+    virtual unsigned int getVAOHandle() {
         return VAOHandle;
     }
     const glm::vec4 getColor() {
