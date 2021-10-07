@@ -15,19 +15,19 @@ void fitPlanar(const std::vector <cv::Point3f>& data, float & a, float & b, floa
     }
     mean = sum / (data.size() * 1.0f);
 
-    showProcessStart("Build Matrix");
+    // showProcessStart("Build Matrix");
     Eigen::MatrixXf dataMatrix(3, data.size());
     for (int i=0; i<data.size(); ++i){
         dataMatrix(0, i) = data[i].x - mean.x;
         dataMatrix(1, i) = data[i].y - mean.y;
         dataMatrix(2, i) = data[i].z - mean.z;
     }
-    showProcessEnd("Build Matrix");
+    // showProcessEnd("Build Matrix");
 
     Eigen::JacobiSVD<Eigen::MatrixXf> SVDSolver(dataMatrix.transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
 
     Eigen::MatrixXf V = SVDSolver.matrixV();
-    std::cout << V << std::endl;
+    // std::cout << V << std::endl;
 
     a = V(0, 2);
     b = V(1, 2);
