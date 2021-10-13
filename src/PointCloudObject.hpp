@@ -63,7 +63,7 @@ public:
     }
 
     void preProcess() {
-        glPointSize(5);
+        glPointSize(2);
     }
 
 };

@@ -281,6 +281,46 @@ public:
         return true;
     }
 
+    
+    bool getCharucoCornersPosition(const std::vector<int> &charucoIds, const std::vector<cv::Point2f> &charucoCorners, std::vector<cv::Point3f> &charucoCornersPositions, cv::Mat &rotMat, cv::Mat &tVec) {
+        std::vector<cv::Point3f> charucoCorner3DPosition;
+        charucoCorner3DPosition.clear();
+        for (int i=0; i<charucoIds.size(); ++i){
+            charucoCorner3DPosition.emplace_back(charucoIds[i]/boardSizeDefault.width, charucoIds[i]%boardSizeDefault.width, 0.0f);
+        }
+
+        get3Dto2DTransform(charucoCorner3DPosition, charucoCorners, rotMat, tVec);
+
+        charucoCornersPositions.clear();
+        for (int i=0; i<charucoIds.size(); ++i){
+            double objectPosition[1][3] = {charucoCorner3DPosition[i].x, charucoCorner3DPosition[i].y, charucoCorner3DPosition[i].z};
+            cv::Mat Pworld(cv::Size(1, 3), CV_64F, objectPosition);
+            cv::Mat Pcam = rotMat * Pworld + tVec; 
+            cv::Point3f Pcam3f(Pcam);
+            charucoCornersPositions.emplace_back(-Pcam3f.x, -Pcam3f.y, Pcam3f.z); // Make the vision Look the same as the picture
+        }
+        return true;
+    }
+
+    cv::Point3f pixelCrossPlanar(const cv::Point2f & pixel, const float &a, const float &b, const float &c, const float &d){
+        cv::Mat invIntrinsic;
+        cv::invert(intrinsic, invIntrinsic);
+        // std::cout << "Intrinsic invert" << std::endl;
+        double pixelArray[1][3] = {pixel.y, pixel.x, 1.0f};
+        cv::Mat pixelMatrix(cv::Size(1, 3), CV_64F, pixelArray);
+        // std::cout << "pixel Matrix Build" << std::endl;
+        cv::Mat pixelMatrixTrans;
+        // std::cout << "pixel Matrix trans" << std::endl;
+        cv::transpose(pixelMatrix, pixelMatrixTrans);
+        // std::cout << invIntrinsic.rows << "| " << invIntrinsic.cols << ", " << pixelMatrixTrans.rows << "|" << pixelMatrixTrans.cols << std::endl;
+        // std::cout << invIntrinsic << ", " << pixelMatrix << std::endl;
+        cv::Mat Pcam = invIntrinsic * pixelMatrix;
+        // std::cout << "Pcam build" << std::endl;
+        cv::Point3f Pcam3f(Pcam);
+        float k = -d/(-Pcam3f.x*a + -Pcam3f.y*b + Pcam3f.z*c);
+        return cv::Point3f(-k*Pcam3f.x, -k*Pcam3f.y, k*Pcam3f.z);
+    }
+
     void iamgeUndistortShow(cv::Mat &image){
         
         cv::namedWindow("Frame", cv::WINDOW_NORMAL);
@@ -366,6 +406,57 @@ public:
         }
     }
 
+    void getBoundary(cv::Mat rotMat, cv::Mat tVec, cv::Point2f &a, cv::Point2f &b, cv::Point2f &c, cv::Point2f &d){
+        
+            // cv::Mat Pscreen;
+            // cv::transpose(intrinsic * Pcam, Pscreen);
+            // cv::Point3d Psrceen3d(Pscreen);
+            // std::cout << "Pscreen = " << Psrceen3d / Psrceen3d.z << "; PCorners = " << corners[i] << std::endl;
+        cv::Point3f object[4] = {
+            cv::Point3f(-1, -1, 0),
+            cv::Point3f(-1, boardSizeDefault.width, 0),
+            cv::Point3f(boardSizeDefault.height, -1, 0),
+            cv::Point3f(boardSizeDefault.height, boardSizeDefault.width, 0)
+        };
+        cv::Mat cam[4];
+        cv::Mat screen[4];
+        cv::Point3d screen3d[4];
+        for (int i=0; i<4; ++i){
+            double world[1][3] = {object[i].x, object[i].y, object[i].z};
+            cam[i] = rotMat * cv::Mat(cv::Size(1, 3), CV_64F, world) + tVec;
+            cv::transpose(intrinsic * cam[i], screen[i]);
+            screen3d[i] = cv::Point3d(screen[i]);
+        }
+        {
+            a = cv::Point2f(screen3d[0].x/screen3d[0].z, screen3d[0].y/screen3d[0].z);
+            b = cv::Point2f(screen3d[1].x/screen3d[1].z, screen3d[1].y/screen3d[1].z);
+            c = cv::Point2f(screen3d[2].x/screen3d[2].z, screen3d[2].y/screen3d[2].z);
+            d = cv::Point2f(screen3d[3].x/screen3d[3].z, screen3d[3].y/screen3d[3].z);
+        }
+    }
+
+    void getLaserPixel(cv::Mat &inputImage, cv::Mat &outputImage, std::vector<cv::Point2f>& laserPosition, cv::Point2f & a, cv::Point2f & b,cv::Point2f & c,cv::Point2f & d, double threshold = 0.01 ){
+        laserPosition.clear();
+        outputImage = cv::Mat(inputImage.size(), CV_64FC1);
+        cv::Size imageSize = inputImage.size();
+        for (int i=0; i<imageSize.height; ++i){
+            for (int j=0; j<imageSize.width; ++j)
+            if (pointInQuad(cv::Point2f(j*1.0f, i*1.0f), a, b, c, d)){
+                cv::Vec3b pixel = inputImage.at<cv::Vec3b>(i, j);
+                double temp = (pixel[2] - (pixel[0] + pixel[1]) / 2.0 ) / 255.0;
+                if (temp>threshold){
+                    outputImage.at<double>(i, j) = 1;
+                    laserPosition.push_back(cv::Point2f(i, j));
+                } else {
+                    outputImage.at<double>(i, j) = 0;
+                    // laserPosition.push_back(cv::Point2f(i, j));
+                }
+            } else {
+                outputImage.at<double>(i, j) = 0;
+            }
+        }
+    }
+
     void getCharucoPosition(cv::Mat &inputImage, std::vector<int> &markerIds, std::vector<std::vector<cv::Point2f> > &markerCorners, std::vector<int> &charucoIds, std::vector<cv::Point2f> &charucoCorners) {
         
         cv::Ptr<cv::aruco::DetectorParameters> params = cv::aruco::DetectorParameters::create();
@@ -375,8 +466,6 @@ public:
 
         if (markerIds.size() > 0) {
             cv::aruco::interpolateCornersCharuco(markerCorners, markerIds, inputImage, charucoBoardDefault, charucoCorners, charucoIds);
-            if (charucoIds.size() > 0)
-                cv::aruco::drawDetectedCornersCharuco(inputImage, charucoCorners, charucoIds, cv::Scalar(255, 0, 0));
         }
 
         return;

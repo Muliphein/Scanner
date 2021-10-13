@@ -59,6 +59,8 @@ std::string cameraScanVideo = CMAKE_VIDEO_PATH+std::string("ObjectScan.mp4");
 std::string cameraCalibrationResult = CMAKE_VIDEO_PATH + std::string("CameraResult.xml");
 std::string cameraCalibrationSplitFolder = CMAKE_VIDEO_PATH + std::string("split/");
 std::string laserPointsFile = CMAKE_VIDEO_PATH + std::string("LaserPointPosition.txt");
+std::string modelFile = CMAKE_VIDEO_PATH + std::string("Model.txt");
+std::string modelOBJFile = CMAKE_VIDEO_PATH + std::string("Model.obj");
 
 // draw objects
 std::vector <BasicObject*> queue;
@@ -80,6 +82,8 @@ Webcam myWebCam;
 #define SKIP_STEP_1_SPLIT_VIDEO
 // #define SKIP_CALI_RESULT_STORE
 #define SKIP_LASER_POINT_CALC
+#define SKIP_CHARUCO_TEST
+// #define SKIP_MODEL_BUILD
 
 int main()
 {
@@ -279,24 +283,27 @@ int main()
     queue.push_back(dynamic_cast<BasicObject*>(&myAxis));
     queue.push_back(dynamic_cast<BasicObject*>(&myCamera));
 
-    LaserObject* myLaserPointsCloud = new LaserObject(laserPoints);
-    queue.push_back(dynamic_cast<BasicObject*>(myLaserPointsCloud));
+    // LaserObject* myLaserPointsCloud = new LaserObject(laserPoints);
+    // queue.push_back(dynamic_cast<BasicObject*>(myLaserPointsCloud));
 
     float planarA, planarB, planarC, planarD;
     fitPlanar(laserPoints, planarA, planarB, planarC, planarD);
 
     showProcessEnd("Calculate the Laser Plane");
 
-    PlannarObject* myPlanarObject = new PlannarObject(planarA, planarB, planarC, planarD, cv::Size(12, 12));
-    queue.push_back(dynamic_cast<BasicObject*>(myPlanarObject));
+    // PlannarObject* myPlanarObject = new PlannarObject(planarA, planarB, planarC, planarD, cv::Size(12, 12));
+    // queue.push_back(dynamic_cast<BasicObject*>(myPlanarObject));
 
+    #ifndef SKIP_CHARUCO_TEST
     {
         showProcessStart(" Charuco Test ");
         
         webCameraCapture.open(cameraScanVideo);
-        cv::Mat frameImage;
+        cv::Mat frameImage, frameImageIn;
         // Capture Test
-        if (webCameraCapture.read(frameImage)){
+        if (webCameraCapture.read(frameImageIn)){
+            // myWebCam.imageUndistort(frameImageIn, frameImage);
+            frameImageIn.copyTo(frameImage);
             std::vector<int> markerIds;
             std::vector<std::vector<cv::Point2f> > markerCorners;
             std::vector<int> charucoIds;
@@ -304,53 +311,199 @@ int main()
             std::vector<cv::Point3f> charucoCorners3DInCamera;
             myWebCam.getCharucoPosition(frameImage, markerIds, markerCorners, charucoIds, charucoCorners);
             myWebCam.getCharucoCornersPosition(charucoIds, charucoCorners, charucoCorners3DInCamera);
-            cv::namedWindow(opencvWindow1, cv::WINDOW_NORMAL);
-            cv::resizeWindow(opencvWindow1, cv::Size(960, 540));
-            cv::moveWindow(opencvWindow1, 0, 0);
-            cv::imshow(opencvWindow1, frameImage);
-            // cv::destroyWindow(opencvWindow1);
+            // cv::namedWindow(opencvWindow1, cv::WINDOW_NORMAL);
+            // cv::resizeWindow(opencvWindow1, cv::Size(960, 540));
+            // cv::moveWindow(opencvWindow1, 0, 0);
+            // cv::imshow(opencvWindow1, frameImage);
+            // cv::waitKey(0);
+            cv::destroyWindow(opencvWindow1);
             PointCloudObject* myCharucoPointCloudObject = new PointCloudObject(charucoCorners3DInCamera);
             queue.push_back(dynamic_cast<BasicObject*>(myCharucoPointCloudObject));
 
         }
         showProcessEnd(" Charuco Test ");
     }
+    #endif
 
-
-    while (!glfwWindowShouldClose(window))
+    // Step 5: Build the Model
+    #ifndef SKIP_MODEL_BUILD
     {
+        showProcessStart(" Model Build ");
+        
+        webCameraCapture.open(cameraScanVideo);
+        cv::Mat frameImage, frameImageIn;
 
-        float currentFrame = static_cast<float>(glfwGetTime());
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
+        cv::namedWindow(opencvWindow1, cv::WINDOW_NORMAL);
+        cv::resizeWindow(opencvWindow1, cv::Size(960, 540));
+        cv::moveWindow(opencvWindow1, 0, 0);
 
-        // Get Input
-        processInput(window);
+        cv::namedWindow(opencvWindow2, cv::WINDOW_NORMAL);
+        cv::resizeWindow(opencvWindow2, cv::Size(960, 540));
+        cv::moveWindow(opencvWindow2, 0, 550);
 
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+        bool onlyOneFrame = false;
+        bool getOneFrame = false;
 
-        myShader.use();
+        std::vector <cv::Point3f> model;
 
-        // Set the projection
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        myShader.setMat4("projection", projection);
-        glm::mat4 view = camera.GetViewMatrix();
-        myShader.setMat4("view", view);
-        glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
-        myShader.setMat4("model", model);
+        while (!glfwWindowShouldClose(window))
+        {
 
-        // Render
-        for (int i=0; i<queue.size(); ++i){
-            BasicObject * pointer = queue[i];
-            pointer->preProcess();
-            myShader.setVec4("color", pointer->getColor());
-            glBindVertexArray(pointer->getVAOHandle());
-            glDrawArrays(pointer->getDrawType(), 0, pointer->getPointNum());
+            bool frameIn = false;
+
+            if (webCameraCapture.read(frameImageIn) && ((!onlyOneFrame) || (!getOneFrame))){
+                getOneFrame = true;
+                frameIn = true;
+                // myWebCam.imageUndistort(frameImageIn, frameImage);
+                frameImageIn.copyTo(frameImage);
+                std::vector<int> markerIds;
+                std::vector<std::vector<cv::Point2f> > markerCorners;
+                std::vector<int> charucoIds;
+                std::vector<cv::Point2f> charucoCorners;
+                std::vector<cv::Point3f> charucoCorners3DInCamera;
+                myWebCam.getCharucoPosition(frameImage, markerIds, markerCorners, charucoIds, charucoCorners);
+                cv::Mat rotMat;
+                cv::Mat tVec;
+                myWebCam.getCharucoCornersPosition(charucoIds, charucoCorners, charucoCorners3DInCamera, rotMat, tVec);
+
+                cv::Point2f a, b, c, d;
+                myWebCam.getBoundary(rotMat, tVec, a, b, c, d);
+                std::vector <cv::Point2f> test;
+                // test.push_back(a);
+                // test.push_back(b);
+                // test.push_back(c);
+                // test.push_back(d);
+                // cv::drawChessboardCorners(frameImage, cv::Size(1, 1), test, true);
+                cv::imshow(opencvWindow1, frameImage);
+                cv::Mat frameImageOut;
+                std::vector <cv::Point2f> laserPixelPosition;
+                // std::cout << a << b << c << d << std::endl;
+                myWebCam.getLaserPixel(frameImage, frameImageOut, laserPixelPosition, a, c, b, d);
+                cv::imshow(opencvWindow2, frameImageOut);
+
+                std::vector <cv::Point3f> laserCamera3DPosition;
+                laserCamera3DPosition.clear();
+
+                for (int i=0; i<laserPixelPosition.size(); ++i){
+                    cv::Point2f temp = laserPixelPosition[i];
+                    cv::Point3f temp3D = myWebCam.pixelCrossPlanar(temp, planarA, planarB, planarC, planarD);
+
+                    cv::Point3f temp3DTrue(-temp3D.x, -temp3D.y, temp3D.z);
+                    cv::Mat rotMatInv;
+                    cv::invert(rotMat, rotMatInv);
+                    
+                    double temp3DTruePosition[1][3] = {temp3DTrue.x, temp3DTrue.y, temp3DTrue.z};
+                    cv::Mat Pcam(cv::Size(1, 3), CV_64F, temp3DTruePosition);
+                    cv::Mat Pworld = -rotMatInv*(Pcam-tVec);
+                    cv::Point3d Pworld3d(Pworld);
+                    cv::Point3f Pworld3f(Pworld3d.x, Pworld3d.y, Pworld3d.z);
+                    cv::Point3f Pworld3fOpenGL(-Pworld3d.x, -Pworld3d.y, Pworld3d.z);
+                    if (Pworld3fOpenGL.z < 0.20f) continue;
+                    model.push_back(Pworld3fOpenGL);
+                }
+
+                
+
+                // PointCloudObject* myLaserPointCloudObject = new PointCloudObject(laserCamera3DPosition);
+                // queue.push_back(dynamic_cast<BasicObject*>(myLaserPointCloudObject));
+
+                PointCloudObject* myCharucoPointCloudObject = new PointCloudObject(charucoCorners3DInCamera);
+                queue.push_back(dynamic_cast<BasicObject*>(myCharucoPointCloudObject));
+            }
+
+            float currentFrame = static_cast<float>(glfwGetTime());
+            deltaTime = currentFrame - lastFrame;
+            lastFrame = currentFrame;
+
+            // Get Input
+            processInput(window);
+
+            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+
+            myShader.use();
+
+            // Set the projection
+            glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+            myShader.setMat4("projection", projection);
+            glm::mat4 view = camera.GetViewMatrix();
+            myShader.setMat4("view", view);
+            glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+            myShader.setMat4("model", model);
+
+            // Render
+            for (int i=0; i<queue.size(); ++i){
+                BasicObject * pointer = queue[i];
+                pointer->preProcess();
+                myShader.setVec4("color", pointer->getColor());
+                glBindVertexArray(pointer->getVAOHandle());
+                glDrawArrays(pointer->getDrawType(), 0, pointer->getPointNum());
+            }
+
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+
+            if (frameIn && !onlyOneFrame) {
+                queue.pop_back();
+                // queue.pop_back();
+            }
+
+        }
+        cv::destroyWindow(opencvWindow1);
+        serialize(model, modelFile);
+        output2Obj(model, modelOBJFile);
+
+        showProcessEnd(" Model Build ");
+    }
+    #endif
+
+    // Step 6: Show Model
+    {
+        showProcessStart(" Model Show ");
+
+        std::vector <cv::Point3f> modelCloud;
+        deserialize(modelCloud, modelFile);
+        PointCloudObject* myModelCloudObject = new PointCloudObject(modelCloud);
+        queue.push_back(dynamic_cast<BasicObject*>(myModelCloudObject));
+
+        while (!glfwWindowShouldClose(window))
+        {
+            float currentFrame = static_cast<float>(glfwGetTime());
+            deltaTime = currentFrame - lastFrame;
+            lastFrame = currentFrame;
+
+            // Get Input
+            processInput(window);
+
+            glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+
+            myShader.use();
+
+            // Set the projection
+            glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+            myShader.setMat4("projection", projection);
+            glm::mat4 view = camera.GetViewMatrix();
+            myShader.setMat4("view", view);
+            glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+            myShader.setMat4("model", model);
+
+            // Render
+            for (int i=0; i<queue.size(); ++i){
+                BasicObject * pointer = queue[i];
+                pointer->preProcess();
+                myShader.setVec4("color", pointer->getColor());
+                glBindVertexArray(pointer->getVAOHandle());
+                glDrawArrays(pointer->getDrawType(), 0, pointer->getPointNum());
+            }
+
+            glfwSwapBuffers(window);
+            glfwPollEvents();
+
         }
 
-        glfwSwapBuffers(window);
-        glfwPollEvents();
+        showProcessEnd(" Model Show ");
+
     }
 
 

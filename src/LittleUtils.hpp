@@ -58,6 +58,16 @@ void serialize (const std::vector<cv::Point3f> & data, std::string fileName) {
     }
 }
 
+
+void output2Obj (const std::vector<cv::Point3f> & data, std::string fileName) {
+    std::ofstream fout;
+    fout.open(fileName, std::ios::out);
+    // fout << data.size() << std::endl;
+    for (auto item: data){
+        fout << "v " << item.x << " " << item.y << " " << item.z << std::endl;
+    }
+}
+
 void deserialize (std::vector<cv::Point3f> & data, std::string fileName){
     std::ifstream fin;
     fin.open(fileName, std::ios::in);
