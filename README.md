@@ -1,6 +1,6 @@
 # Scanner
 
-## Part $\Iota$
+## Part $I$
 
 利用红色一字激光的主动扫描
 
@@ -66,12 +66,6 @@ $P^\prime=\left[
         z^\prime
     \end{matrix} 
   \right] = Intrinsic \times P_{camera}$
-
-其中$Intrinsic = \left[
-    \begin{matrix}
-        1.1454118037202288e03 & 0. & 9.5950000000000000e02 \\0. & 1.1440670673487782e03 & 5.3950000000000000e02 \\ 0. & 0. & 1.
-    \end{matrix} 
-  \right]$
 
 得到的结果即$p_x = x^\prime/z^\prime, p_y=y^\prime/z^\prime$
 
