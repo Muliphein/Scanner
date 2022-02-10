@@ -18,11 +18,11 @@
 
 `./resource/video/Calibration.mp4`，是用于进行摄像头以及激光进行标定的
 
-<img src="E:\Engine\README.assets\image-20211013180406391.png" alt="image-20211013180406391" style="zoom: 33%;" />
+![](https://github.com/Muliphein/Scanner/blob/main/README.assets/image-20211013180406391.png)
 
 `./resource/video/ObjectScan.mp4`，是用于进行物体的重建的
 
-<img src="E:\Engine\README.assets\image-20211013180437501.png" alt="image-20211013180437501" style="zoom:33%;" />
+![](https://github.com/Muliphein/Scanner/blob/main/README.assets/image-20211013180437501.png)
 
 #### 摄像头标定
 
@@ -142,7 +142,7 @@ $R$表示旋转，$T$表示平移。这里$R$被表示成了一个向量，我�
 
 ### 建模结果
 
-<img src="E:\Engine\README.assets\image-20211013215620498.png" alt="image-20211013215620498" style="zoom: 67%;" />
+![](https://github.com/Muliphein/Scanner/blob/main/README.assets/image-20211013215620498.png)
 
 中间有一部分是因为没有红外线扫过造成的。
 
